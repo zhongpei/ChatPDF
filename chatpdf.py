@@ -3,8 +3,12 @@
 @author:XuMing(xuming624@qq.com)
 @description: 
 """
+import logging
+
 from similarities import Similarity
 from textgen import ChatGlmModel, LlamaModel
+from transformers import pipeline
+from loguru import logger
 
 PROMPT_TEMPLATE = """\
 基于以下已知信息，简洁和专业的来回答用户的问题。
@@ -28,11 +32,14 @@ class ChatPDF:
 
     ):
         self.sim_model = Similarity(model_name_or_path=sim_model_name_or_path)
+        self.model_type = gen_model_type
 
         if gen_model_type == "chatglm":
             self.gen_model = ChatGlmModel(gen_model_type, gen_model_name_or_path, lora_name=lora_model_name_or_path)
         elif gen_model_type == "llama":
             self.gen_model = LlamaModel(gen_model_type, gen_model_name_or_path, lora_name=lora_model_name_or_path)
+        elif gen_model_type == "t5":
+            self.gen_model = pipeline('text2text-generation', model=gen_model_name_or_path, device=0)
         else:
             raise ValueError('gen_model_type must be chatglm or llama.')
         self.history = None
@@ -107,8 +114,20 @@ class ChatPDF:
 
     def _generate_answer(self, query_str, context_str, history=None, max_length=1024):
         """Generate answer from query and context."""
+        if self.model_type == "t5":
+            response = self.gen_model(query_str, max_length=max_length, do_sample=True)[0]['generated_text']
+            return response, history
         prompt = PROMPT_TEMPLATE.format(context_str=context_str, query_str=query_str)
         response, out_history = self.gen_model.chat(prompt, history, max_length=max_length)
+        return response, out_history
+
+    def chat(self, query_str, history=None, max_length=1024):
+        if self.model_type == "t5":
+            response = self.gen_model(query_str, max_length=max_length, do_sample=True)[0]['generated_text']
+            logger.debug(response)
+            return response, history
+
+        response, out_history = self.gen_model.chat(query_str, history, max_length=max_length)
         return response, out_history
 
     def query(

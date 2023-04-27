@@ -10,6 +10,7 @@ import shutil
 from loguru import logger
 from chatpdf import ChatPDF
 import hashlib
+from typing import List
 
 pwd_path = os.path.abspath(os.path.dirname(__file__))
 
@@ -29,11 +30,14 @@ embedding_model_dict = {
 
 # supported LLM models
 llm_model_dict = {
-    "chatglm-6b": "THUDM/chatglm-6b",
+  
+    # "chatglm-6b": "E:\\sdwebui\\image2text_prompt_generator\\models\\chatglm-6b",
     "chatglm-6b-int4": "THUDM/chatglm-6b-int4",
+    "chatglm-6b": "THUDM/chatglm-6b",
     "chatglm-6b-int4-qe": "THUDM/chatglm-6b-int4-qe",
     "llama-7b": "decapoda-research/llama-7b-hf",
     "llama-13b": "decapoda-research/llama-13b-hf",
+    "t5-lamini-flan-783M": "MBZUAI/LaMini-Flan-T5-783M",
 }
 
 llm_model_dict_list = list(llm_model_dict.keys())
@@ -49,18 +53,14 @@ def get_file_list():
             f.endswith(".txt") or f.endswith(".pdf") or f.endswith(".docx") or f.endswith(".md")]
 
 
-file_list = get_file_list()
-
-
-def upload_file(file):
+def upload_file(file, file_list):
     if not os.path.exists(CONTENT_DIR):
         os.mkdir(CONTENT_DIR)
     filename = os.path.basename(file.name)
     shutil.move(file.name, os.path.join(CONTENT_DIR, filename))
     # file_list首位插入新上传的文件
     file_list.insert(0, filename)
-    return gr.Dropdown.update(choices=file_list, value=filename)
-
+    return gr.Dropdown.update(choices=file_list, value=filename), file_list
 
 
 def parse_text(text):
@@ -96,10 +96,19 @@ def parse_text(text):
     return text
 
 
-def get_answer(query, index_path, history, topn=VECTOR_SEARCH_TOP_K, max_input_size=1024, only_chat=False):
+def get_answer(
+        query,
+        index_path,
+        history,
+        topn: int = VECTOR_SEARCH_TOP_K,
+        max_input_size: int = 1024,
+        chat_mode: str = "pdf"
+):
+    global model
+
     if model is None:
         return [None, "模型还未加载"], query
-    if index_path and not only_chat:
+    if index_path and chat_mode == "pdf":
         if not model.sim_model.corpus_embeddings:
             model.load_index(index_path)
         response, empty_history, reference_results = model.query(query=query, topn=topn, max_input_size=max_input_size)
@@ -112,7 +121,7 @@ def get_answer(query, index_path, history, topn=VECTOR_SEARCH_TOP_K, max_input_s
         history = history + [[query, response]]
     else:
         # 未加载文件，仅返回生成模型结果
-        response, empty_history = model.gen_model.chat(query)
+        response, empty_history = model.chat(query, history)
         response = parse_text(response)
         history = history + [[query, response]]
         logger.debug(f"query: {query}, response: {response}")
@@ -188,12 +197,6 @@ def reset_chat(chatbot, state):
     return None, None
 
 
-def change_max_input_size(input_size):
-    if model is not None:
-        model.max_input_size = input_size
-    return
-
-
 block_css = """.importantButton {
     background: linear-gradient(45deg, #7e0570,#5d1c99, #6e00ff) !important;
     border: none !important;
@@ -205,13 +208,14 @@ block_css = """.importantButton {
 
 webui_title = """
 # 🎉ChatPDF WebUI🎉
-Link in: [https://github.com/shibing624/ChatPDF](https://github.com/shibing624/ChatPDF)  PS: 2核CPU 16G内存机器，约2min一条😭
+Link in: [https://github.com/zhongpei/ChatPDF](https://github.com/zhongpei/ChatPDF)  Test for MBZUAI/LaMini-Flan-T5-783M
 """
 
 init_message = """欢迎使用 ChatPDF Web UI，可以直接提问或上传文件后提问 """
 
 with gr.Blocks(css=block_css) as demo:
     index_path, file_status, model_status = gr.State(""), gr.State(""), gr.State("")
+    file_list = gr.State(get_file_list())
     gr.Markdown(webui_title)
     with gr.Row():
         with gr.Column(scale=2):
@@ -232,31 +236,30 @@ with gr.Blocks(css=block_css) as demo:
                                        value=embedding_model_dict_list[0],
                                        interactive=True)
 
-            load_model_button = gr.Button("重新加载模型")
+            load_model_button = gr.Button("重新加载模型" if model is not None else "加载模型")
 
             with gr.Row():
-                only_chat = gr.Checkbox(False, label="不加载文本(纯聊天)")
+                chat_mode = gr.Radio(choices=["chat", "pdf"], value="pdf", label="聊天模式")
 
             with gr.Row():
                 topn = gr.Slider(1, 100, 20, step=1, label="最大搜索数量")
                 max_input_size = gr.Slider(512, 4096, MAX_INPUT_LEN, step=10, label="摘要最大长度")
             with gr.Tab("select"):
-                selectFile = gr.Dropdown(
-                    file_list,
-                    label="content file",
-                    interactive=True,
-                    value=file_list[0] if len(file_list) > 0 else None
-                )
+                with gr.Row():
+                    selectFile = gr.Dropdown(
+                        file_list.value,
+                        label="content file",
+                        interactive=True,
+                        value=file_list.value[0] if len(file_list.value) > 0 else None
+                    )
+                    # get_file_list_btn = gr.Button('🔄').style(width=10)
             with gr.Tab("upload"):
                 file = gr.File(
                     label="content file",
                     file_types=['.txt', '.md', '.docx', '.pdf']
                 )
             load_file_button = gr.Button("加载文件")
-    max_input_size.change(
-        change_max_input_size,
-        inputs=max_input_size
-    )
+
     load_model_button.click(
         reinit_model,
         show_progress=True,
@@ -264,7 +267,11 @@ with gr.Blocks(css=block_css) as demo:
         outputs=chatbot
     )
     # 将上传的文件保存到content文件夹下,并更新下拉框
-    file.upload(upload_file, inputs=file, outputs=selectFile)
+    file.upload(
+        upload_file,
+        inputs=[file, file_list],
+        outputs=[selectFile, file_list]
+    )
     load_file_button.click(
         get_vector_store,
         show_progress=True,
@@ -273,7 +280,7 @@ with gr.Blocks(css=block_css) as demo:
     )
     query.submit(
         get_answer,
-        [query, index_path, chatbot, topn, max_input_size, only_chat],
+        [query, index_path, chatbot, topn, max_input_size, chat_mode],
         [chatbot, query],
     )
     clear_btn.click(reset_chat, [chatbot, query], [chatbot, query])
