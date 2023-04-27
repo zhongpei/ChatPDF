@@ -55,11 +55,6 @@ python webui.py
 
 如果一切顺利，现在，你应该已经可以在浏览器地址栏中输入 http://localhost:7860 查看并使用 ChatPDF 了。
 
-## Contact
-
-- Issue(建议)：[![GitHub issues](https://img.shields.io/github/issues/shibing624/ChatPDF.svg)](https://github.com/shibing624/ChatPDF/issues)
-- 邮件我：xuming: xuming624@qq.com
-- 微信我：加我*微信号：xuming624, 备注：姓名-公司-NLP* 进NLP交流群。
 
 ## License
 
