@@ -9,6 +9,9 @@ from similarities import Similarity
 from textgen import ChatGlmModel, LlamaModel
 from transformers import pipeline
 from loguru import logger
+import torch
+
+device_id = 0 if torch.cuda.is_available() else -1
 
 PROMPT_TEMPLATE = """\
 基于以下已知信息，简洁和专业的来回答用户的问题。
@@ -39,7 +42,7 @@ class ChatPDF:
         elif gen_model_type == "llama":
             self.gen_model = LlamaModel(gen_model_type, gen_model_name_or_path, lora_name=lora_model_name_or_path)
         elif gen_model_type == "t5":
-            self.gen_model = pipeline('text2text-generation', model=gen_model_name_or_path, device=0)
+            self.gen_model = pipeline('text2text-generation', model=gen_model_name_or_path, device=device_id)
         else:
             raise ValueError('gen_model_type must be chatglm or llama.')
         self.history = None

@@ -30,7 +30,7 @@ embedding_model_dict = {
 
 # supported LLM models
 llm_model_dict = {
-  
+
     # "chatglm-6b": "E:\\sdwebui\\image2text_prompt_generator\\models\\chatglm-6b",
     "chatglm-6b-int4": "THUDM/chatglm-6b-int4",
     "chatglm-6b": "THUDM/chatglm-6b",
