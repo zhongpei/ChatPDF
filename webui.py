@@ -61,7 +61,6 @@ def upload_file(file, file_list):
     file_list.insert(0, filename)
     return gr.Dropdown.update(choices=file_list, value=filename), file_list
 
-
 def parse_text(text):
     """copy from https://github.com/GaiZhenbiao/ChuanhuChatGPT/"""
     lines = text.split("\n")
@@ -133,11 +132,14 @@ def update_status(history, status):
     return history
 
 
-def reinit_model(llm_model, embedding_model, history):
+def reinit_model(llm_model, llm_lora, embedding_model, history):
     try:
         global model
         if model is not None:
             del model
+        llm_lora_path = None
+        if llm_lora is not None and os.path.exists(llm_lora):
+            llm_lora_path = llm_lora
         model = ChatPDF(
             sim_model_name_or_path=embedding_model_dict.get(
                 embedding_model,
@@ -145,7 +147,7 @@ def reinit_model(llm_model, embedding_model, history):
             ),
             gen_model_type=llm_model.split('-')[0],
             gen_model_name_or_path=llm_model_dict.get(llm_model, "THUDM/chatglm-6b-int4"),
-            lora_model_name_or_path=None,
+            lora_model_name_or_path=llm_lora_path
         )
 
         model_status = """模型已成功重新加载，请选择文件后点击"加载文件"按钮"""
@@ -230,6 +232,7 @@ with gr.Blocks(css=block_css) as demo:
                                  label="LLM 模型",
                                  value=list(llm_model_dict.keys())[0],
                                  interactive=True)
+            llm_lora = gr.Textbox(label="lora path",value="E:\\output")
             embedding_model = gr.Radio(embedding_model_dict_list,
                                        label="Embedding 模型",
                                        value=embedding_model_dict_list[0],
@@ -262,7 +265,7 @@ with gr.Blocks(css=block_css) as demo:
     load_model_button.click(
         reinit_model,
         show_progress=True,
-        inputs=[llm_model, embedding_model, chatbot],
+        inputs=[llm_model, llm_lora, embedding_model, chatbot],
         outputs=chatbot
     )
     # 将上传的文件保存到content文件夹下,并更新下拉框
